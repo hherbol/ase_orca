@@ -1,4 +1,8 @@
 from __future__ import print_function
+import sys
+
+# Number of lines to print from end of orca output file in case of error
+ORCA_ERROR_OUT = 15
 
 class OrcaReader:
 
@@ -42,6 +46,13 @@ class OrcaReader:
             route = [line[5:] for line in content.split('\n') if line.startswith('|  1>')][0]
         except IndexError:
             raise IOError('Could not find route line in %s: job most likely crashed.' % input_path)
+
+        if "ABORTING THE RUN" in content:
+            print("Orca simulation crashed - Unable to read in output.")
+            print("Final lines:")
+            for s in content.split('\n')[-ORCA_ERROR_OUT:]:
+                print("\t%s" % s)
+            sys.exit()
 
         version = content.split("Program Version")[1].split("\n")[0]
         method = route.split("!")[1].split()[0]
