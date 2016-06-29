@@ -6,6 +6,10 @@ This is currently a rudimentary patch to the Atomic Simulation Enviroment (ASE) 
 
 To install everything, first install pip, then the ASE library, then copy this git repo to the ASE python code.
 
+### Installing Orca
+
+To install orca, please go to their website [here](https://orcaforum.cec.mpg.de/), register an account, and follow their instructions to install.
+
 ### Installing Pip
 
 To install pip, follow the guidelines [here](https://pip.pypa.io/en/stable/installing/).  Simply put, you'll download "get-pip.py" and then run it using python.
