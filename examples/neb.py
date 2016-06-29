@@ -26,5 +26,3 @@ dyn.run(fmax=0.1)
 # Save?
 for image in images:
     print(image.get_distance(1, 2), image.get_potential_energy())
-
-# Adding fake comment to test commit
