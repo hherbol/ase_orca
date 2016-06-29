@@ -30,5 +30,6 @@ In linux, you'll find the python files in a folder such as:
     git init
     git remote add origin git@github.com:hherbol/ase_orca.git
     git fetch
+    git reset origin/master
     git checkout -t origin/master
 
