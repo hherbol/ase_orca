@@ -29,7 +29,5 @@ In linux, you'll find the python files in a folder such as:
     cd ~/.local/lib/python2.7/site-packages/ase/
     git init
     git remote add origin git@github.com:hherbol/ase_orca.git
-    git fetch
-    git reset origin/master
-    git checkout -t origin/master
-
+    git fetch --all
+    git reset --hard origin/master
