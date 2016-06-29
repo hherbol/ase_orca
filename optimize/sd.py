@@ -57,11 +57,11 @@ class SD(Optimizer):
         atoms = self.atoms
         r = atoms.get_positions()
         f = f.reshape(-1)
-        print "Atom1 : " + str(r[0])
-        print "Force1: " + str(f.reshape((-1,3))[0])
+        dr = (f * self.alpha).reshape((-1,3))
 
-        self.r0 = (r + f.reshape((-1,3))).copy()
+        self.r0 = (r + dr).copy()
         self.f0 = f.copy()
+
         atoms.set_positions(self.r0)
         self.dump((self.r0, self.f0, self.maxstep, self.alpha))
 

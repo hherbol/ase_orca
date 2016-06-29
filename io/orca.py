@@ -23,18 +23,18 @@ def read_orca_out(filename, index=-1, quantity='atoms'):
     for number in atomic_numbers:
         formula += chemical_symbols[number]
 
-    positions = np.array(data['Positions'])
+    positions = np.array(data['Positions'])*ase.units.Angstrom
     method = data['Method']
     version = data['Version']
     charge = data['Charge']
     multiplicity = data['Multiplicity']
     energy = data['Energy'] * ase.units.Hartree
+
     if data['Gradient'] is None:
         forces = None
     else:
         forces = [-1*np.array(d) for d in data['Gradient']]
-        convert = ase.units.Hartree / ase.units.Bohr
-        forces = np.array(forces) * convert
+        forces = np.array(forces) * ase.units.Hartree / ase.units.Bohr
 
     atoms = Atoms(formula, positions=positions)
 
