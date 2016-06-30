@@ -1,6 +1,7 @@
 from sys import argv
 
 FMAX = 0.2
+RIGID_ROTATION = True
 
 def method_ASE():
 	from ase.io import read, write
@@ -22,7 +23,7 @@ def method_ASE():
 	    images += [a.copy()]
 
 	# Setup neb
-	neb = NEB(images, parallel=False, remove_rotation_and_translation=False)
+	neb = NEB(images, parallel=False, remove_rotation_and_translation=RIGID_ROTATION)
 	# Set the calculator
 	for image in images:
 	    image.set_calculator(orca(label="CNH_HCN", RunTyp="Gradient"))
@@ -48,7 +49,7 @@ def method_CLANCELOT():
 	route = '! HF-3c'
 
 	run_name = 'CNH_HCN_clancelot'
-	neb(run_name, frames, route, k=convert_energy("eV","Ha",0.1), opt="SD", maxiter=1000, gtol=convert("eV/Ang","Ha/Ang",0.03), fmax=convert("eV/Ang","Ha/Ang",FMAX), DFT='orca', alpha=0.1, fit_rigid=False, reset=100)
+	neb(run_name, frames, route, k=convert_energy("eV","Ha",0.1), opt="SD", maxiter=1000, gtol=convert("eV/Ang","Ha/Ang",0.03), fmax=convert("eV/Ang","Ha/Ang",FMAX), DFT='orca', alpha=0.1, fit_rigid=RIGID_ROTATION, reset=100)
 	write_xyz(frames,"CNH_HCN_opt_clancelot")
 
 	print("\nDONE WITH CLANCELOT SIMULATION...\n")
