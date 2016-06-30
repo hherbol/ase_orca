@@ -90,8 +90,8 @@ class orca(FileIOCalculator):
             self.parameters["RunTyp"] = "Opt"
           elif self.parameters["RunTyp"].upper() == "ENGRAD":
             self.parameters["RunTyp"] = "Gradient"
-          self.extra += "\n%method\n RunTyp "+self.parameters["RunTyp"]+"\n"
-          self.extra += " end"
+          s = "\n%method\n RunTyp "+self.parameters["RunTyp"]+"\n end"
+          if s not in self.extra: self.extra += s
 
         inputfile.write(route)
         inputfile.write(self.extra)
