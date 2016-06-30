@@ -4,6 +4,7 @@ import numpy as np
 from numpy.linalg import eigh
 
 from ase.optimize.optimize import Optimizer
+import ase.units as units
 
 
 class SD(Optimizer):
@@ -53,13 +54,22 @@ class SD(Optimizer):
     def read(self):
         self.H, self.r0, self.f0, self.maxstep = self.load()
 
-    def step(self, f):
+    def step(self, f_eV):
         atoms = self.atoms
         r = atoms.get_positions()
+        # To maintain similarity in comparison with clancelot, convert force to units of hartree
+        f = f_eV.copy() / units.Hartree
         f = f.reshape(-1)
-        dr = (f * self.alpha).reshape((-1,3))
+
+        max_step_length = np.sqrt((np.array(f).reshape((-1,3))**2).sum(axis=1).max())
+        # Scale if max step is larger than alpha
+        if max_step_length*self.alpha > self.alpha:
+            dr = np.array(f).reshape((-1,3)) * self.alpha / max_step_length
+        else:
+            dr = np.array(f).reshape((-1,3)) * self.alpha
 
         self.r0 = (r + dr).copy()
+        
         self.f0 = f.copy()
 
         atoms.set_positions(self.r0)
