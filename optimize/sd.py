@@ -59,18 +59,18 @@ class SD(Optimizer):
         r = atoms.get_positions()
         # To maintain similarity in comparison with clancelot, convert force to units of hartree
         f = f_eV.copy() / units.Hartree
-        f = f.reshape(-1)
+        f = f.reshape(-1).reshape((-1,3))
 
-        max_step_length = np.sqrt((np.array(f).reshape((-1,3))**2).sum(axis=1).max())
+        max_step_length = np.sqrt(((f)**2).sum(axis=1).max())
         # Scale if max step is larger than alpha
-        if max_step_length*self.alpha > self.alpha:
-            dr = np.array(f).reshape((-1,3)) * self.alpha / max_step_length
+        if max_step_length > 1.0:
+            dr = f * self.alpha / max_step_length
         else:
-            dr = np.array(f).reshape((-1,3)) * self.alpha
+            dr = f * self.alpha
 
         self.r0 = (r + dr).copy()
         
-        self.f0 = f.copy()
+        self.f0 = f.reshape(-1).copy()
 
         atoms.set_positions(self.r0)
         self.dump((self.r0, self.f0, self.maxstep, self.alpha))
