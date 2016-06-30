@@ -33,7 +33,7 @@ def method_ASE():
 
 	# Save?
 	traj = read("CNH_HCN.traj",':-1')
-	write("CNH_HCN_opt_ASE.xyz",traj)
+	write("../CNH_HCN_opt_ASE.xyz",traj)
 
 	chdir("..")
 	print("\nDONE WITH ASE SIMULATION...\n")

@@ -162,7 +162,8 @@ class NEB:
 
         if use_clancelot:
             V = energies.copy()
-            self.emax = max(V)
+            # Output max energy in units of kT at 300 K
+            self.emax = (max(V)-V[0]) / (units.kB * 300.0)
             for i in range(1, self.nimages-1):
                 a = images[i-1].get_positions()
                 b = images[i].get_positions()
