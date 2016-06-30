@@ -98,9 +98,15 @@ class NEB:
 
     def get_forces(self):
         """Evaluate and return the forces."""
+        use_clancelot = True
+
         images = self.images
         forces = np.empty(((self.nimages - 2), self.natoms, 3))
-        energies = np.empty(self.nimages - 2)
+        
+        if use_clancelot:
+            energies = np.empty(self.nimages)
+        else:
+            energies = np.empty(self.nimages - 2)
 
         if self.remove_rotation_and_translation:
             # Remove translation and rotation between
@@ -110,9 +116,16 @@ class NEB:
 
         if not self.parallel:
             # Do all images - one at a time:
+            if use_clancelot:
+                energies[0] = images[0].get_potential_energy()
             for i in range(1, self.nimages - 1):
-                energies[i - 1] = images[i].get_potential_energy()
+                if use_clancelot:
+                    energies[i] = images[i].get_potential_energy()
+                else:
+                    energies[i - 1] = images[i].get_potential_energy()
                 forces[i - 1] = images[i].get_forces()
+            if use_clancelot:
+                energies[-1] = images[-1].get_potential_energy()
 
         elif self.world.size == 1:
             def run(image, energies, forces):
@@ -147,41 +160,83 @@ class NEB:
                 self.world.broadcast(energies[i - 1:i], root)
                 self.world.broadcast(forces[i - 1], root)
 
-        f_chk = forces.copy().reshape((-1,3))
-        print "Force Check 1", f_chk[3]
+        if use_clancelot:
+            V = energies.copy()
+            self.emax = max(V)
+            for i in range(1, self.nimages-1):
+                a = images[i-1].get_positions()
+                b = images[i].get_positions()
+                c = images[i+1].get_positions()
+                real_force = forces[i - 1]
+                k = self.k[i]
 
-        imax = 1 + np.argsort(energies)[-1]
-        self.emax = energies[imax - 1]
+                # Find tangent
+                tplus = c - b
+                tminus = b - a
+                dVmin = min( abs(V[i+1] - V[i]), abs(V[i-1]-V[i]) )
+                dVmax = max( abs(V[i+1] - V[i]), abs(V[i-1]-V[i]) )
+                if V[i+1] > V[i] and V[i] > V[i-1]:
+                    tangent = tplus.copy()
+                elif V[i+1] < V[i] and V[i] < V[i-1]:
+                    tangent = tminus.copy()
+                elif V[i+1] > V[i-1]:
+                    tangent = tplus*dVmax + tminus*dVmin
+                else:
+                    tangent = tplus*dVmin + tminus*dVmax
 
-        tangent1 = find_mic(images[1].get_positions() -
-                            images[0].get_positions(),
-                            images[0].get_cell(), images[0].pbc)[0]
-        for i in range(1, self.nimages - 1):
-            tangent2 = find_mic(images[i + 1].get_positions() -
-                                images[i].get_positions(),
-                                images[i].get_cell(),
-                                images[i].pbc)[0]
-            if i < imax:
-                tangent = tangent2
-            elif i > imax:
-                tangent = tangent1
-            else:
-                tangent = tangent1 + tangent2
+                # Normalize tangent
+                for j,t in enumerate(tangent):
+                    if np.linalg.norm(t) == 0: pass
+                    else: tangent[j] = t / np.linalg.norm(t)
 
-            tt = np.vdot(tangent, tangent)
-            f = forces[i - 1]
-            ft = np.vdot(f, tangent)
-            if i == imax and self.climb:
-                f -= 2 * ft / tt * tangent
-            else:
-                f -= ft / tt * tangent
-                f -= np.vdot(tangent1 * self.k[i - 1] -
-                             tangent2 * self.k[i], tangent) / tt * tangent
+                # Find spring forces parallel to tangent
+                def dist(r1, r2):
+                    return np.sqrt(((r1-r2)**2).sum(axis=1))
 
-            tangent1 = tangent2
+                F_spring_parallel = np.array([])
+                distances = dist(c,b) - dist(b,a)
+                for t,d in zip(tangent, distances):
+                    F_spring_parallel = np.append(F_spring_parallel, [k * np.array(d) * t])
+                F_spring_parallel = F_spring_parallel.reshape((-1,3))
 
-        f_chk = forces.copy().reshape((-1,3))
-        print "Force Check 2", f_chk[3]
+                # Find DFT forces perpendicular to tangent
+                F_real_perpendicular = np.array([])
+                for r,t in zip(real_force,tangent):
+                    F_real_perpendicular = np.append(F_real_perpendicular, r - np.dot(r,t)*t)
+                F_real_perpendicular = F_real_perpendicular.reshape((-1,3))
+
+                # Set NEB forces
+                forces[i-1] = F_spring_parallel + F_real_perpendicular
+        else:
+            imax = 1 + np.argsort(energies)[-1]
+            self.emax = energies[imax - 1]
+
+            tangent1 = find_mic(images[1].get_positions() -
+                                images[0].get_positions(),
+                                images[0].get_cell(), images[0].pbc)[0]
+            for i in range(1, self.nimages - 1):
+                tangent2 = find_mic(images[i + 1].get_positions() -
+                                    images[i].get_positions(),
+                                    images[i].get_cell(),
+                                    images[i].pbc)[0]
+                if i < imax:
+                    tangent = tangent2
+                elif i > imax:
+                    tangent = tangent1
+                else:
+                    tangent = tangent1 + tangent2
+
+                tt = np.vdot(tangent, tangent)
+                f = forces[i - 1]
+                ft = np.vdot(f, tangent)
+                if i == imax and self.climb:
+                    f -= 2 * ft / tt * tangent
+                else:
+                    f -= ft / tt * tangent
+                    f -= np.vdot(tangent1 * self.k[i - 1] -
+                                 tangent2 * self.k[i], tangent) / tt * tangent
+
+                tangent1 = tangent2
 
         return forces.reshape((-1, 3))
 
