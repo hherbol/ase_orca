@@ -15,7 +15,7 @@ import ase.units as units
 
 class NEB:
     def __init__(self, images, k=0.1, climb=False, parallel=False,
-                 remove_rotation_and_translation=False, world=None):
+                 remove_rotation_and_translation=False, world=None, clancelot=False):
         """Nudged elastic band.
 
         images: list of Atoms objects
@@ -37,6 +37,7 @@ class NEB:
         self.natoms = len(images[0])
         self.nimages = len(images)
         self.emax = np.nan
+        self.use_clancelot = clancelot
         
         self.remove_rotation_and_translation = remove_rotation_and_translation
         
@@ -98,12 +99,10 @@ class NEB:
 
     def get_forces(self):
         """Evaluate and return the forces."""
-        use_clancelot = True
-
         images = self.images
         forces = np.empty(((self.nimages - 2), self.natoms, 3))
         
-        if use_clancelot:
+        if self.use_clancelot:
             energies = np.empty(self.nimages)
         else:
             energies = np.empty(self.nimages - 2)
@@ -116,15 +115,15 @@ class NEB:
 
         if not self.parallel:
             # Do all images - one at a time:
-            if use_clancelot:
+            if self.use_clancelot:
                 energies[0] = images[0].get_potential_energy()
             for i in range(1, self.nimages - 1):
-                if use_clancelot:
+                if self.use_clancelot:
                     energies[i] = images[i].get_potential_energy()
                 else:
                     energies[i - 1] = images[i].get_potential_energy()
                 forces[i - 1] = images[i].get_forces()
-            if use_clancelot:
+            if self.use_clancelot:
                 energies[-1] = images[-1].get_potential_energy()
 
         elif self.world.size == 1:
@@ -160,7 +159,7 @@ class NEB:
                 self.world.broadcast(energies[i - 1:i], root)
                 self.world.broadcast(forces[i - 1], root)
 
-        if use_clancelot:
+        if self.use_clancelot:
             V = energies.copy()
             # Output max energy in units of kT at 300 K
             self.emax = (max(V)-V[0]) / (units.kB * 300.0)
