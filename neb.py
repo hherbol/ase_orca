@@ -117,6 +117,8 @@ class NEB:
             # Do all images - one at a time:
             if self.use_clancelot:
                 energies[0] = images[0].get_potential_energy()
+            else:
+                energies_0 = images[0].get_potential_energy()
             for i in range(1, self.nimages - 1):
                 if self.use_clancelot:
                     energies[i] = images[i].get_potential_energy()
@@ -209,7 +211,8 @@ class NEB:
                 forces[i-1] = F_spring_parallel + F_real_perpendicular
         else:
             imax = 1 + np.argsort(energies)[-1]
-            self.emax = energies[imax - 1]
+            #self.emax = energies[imax - 1]
+            self.emax = (max(energies)-energies_0) / (units.kB * 300.0)
 
             tangent1 = find_mic(images[1].get_positions() -
                                 images[0].get_positions(),
