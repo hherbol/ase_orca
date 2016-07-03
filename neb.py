@@ -117,6 +117,7 @@ class NEB:
                 forces[i] = images[i].get_forces()
             forces = forces[1:-1]
             if not self.use_clancelot:
+                energies_0 = energies[0]
                 energies = energies[1:-1]
 
         elif self.world.size == 1:
@@ -135,6 +136,7 @@ class NEB:
                 thread.join()
             forces = forces[1:-1]
             if not self.use_clancelot:
+                energies_0 = energies[0]
                 energies = energies[1:-1]
         else:
             # Parallelize over images:
@@ -157,6 +159,7 @@ class NEB:
                 self.world.broadcast(forces[i], root)
             forces = forces[1:-1]
             if not self.use_clancelot:
+                energies_0 = energies[0]
                 energies = energies[1:-1]
 
         if self.use_clancelot:
