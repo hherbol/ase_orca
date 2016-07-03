@@ -188,25 +188,13 @@ class NEB:
                     tangent = tplus*dVmin + tminus*dVmax
 
                 # Normalize tangent
-                for j,t in enumerate(tangent):
-                    if np.linalg.norm(t) == 0: pass
-                    else: tangent[j] = t / np.linalg.norm(t)
+                tangent_norm = np.sqrt(np.vdot(tangent,tangent))
+                if tangent_norm != 0: tangent /= tangent_norm
 
-                # Find spring forces parallel to tangent
-                def dist(r1, r2):
-                    return np.sqrt(((r1-r2)**2).sum(axis=1))
+                F_spring_parallel = k * (np.linalg.norm(tplus) - np.linalg.norm(tminus)) * tangent 
 
-                F_spring_parallel = np.array([])
-                distances = dist(c,b) - dist(b,a)
-                for t,d in zip(tangent, distances):
-                    F_spring_parallel = np.append(F_spring_parallel, [k * np.array(d) * t])
-                F_spring_parallel = F_spring_parallel.reshape((-1,3))
-
-                # Find DFT forces perpendicular to tangent
-                F_real_perpendicular = np.array([])
-                for r,t in zip(real_force,tangent):
-                    F_real_perpendicular = np.append(F_real_perpendicular, r - np.dot(r,t)*t)
-                F_real_perpendicular = F_real_perpendicular.reshape((-1,3))
+                F_real_parallel = (np.vdot(real_force,tangent)*tangent).reshape((-1,3))
+                F_real_perpendicular = real_force - F_real_parallel
 
                 # Set NEB forces
                 forces[i-1] = F_spring_parallel + F_real_perpendicular
@@ -223,22 +211,28 @@ class NEB:
                                     images[i].get_positions(),
                                     images[i].get_cell(),
                                     images[i].pbc)[0]
-                if i < imax:
+
+                if i < imax: # tplus
                     tangent = tangent2
-                elif i > imax:
+                elif i > imax: # tminus
                     tangent = tangent1
                 else:
                     tangent = tangent1 + tangent2
 
                 tt = np.vdot(tangent, tangent)
+
                 f = forces[i - 1]
+                real_force = forces[i-1].copy()
+
                 ft = np.vdot(f, tangent)
                 if i == imax and self.climb:
                     f -= 2 * ft / tt * tangent
                 else:
-                    f -= ft / tt * tangent
-                    f -= np.vdot(tangent1 * self.k[i - 1] -
-                                 tangent2 * self.k[i], tangent) / tt * tangent
+                    F_real_parallel = ft / tt * tangent
+                    f -= F_real_parallel
+                    F_spring_parallel = np.vdot(tangent2 * self.k[i - 1] -
+                                 tangent1 * self.k[i], tangent) / tt * tangent
+                    f += F_spring_parallel
 
                 tangent1 = tangent2
 

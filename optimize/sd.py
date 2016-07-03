@@ -44,11 +44,12 @@ class SD(Optimizer):
                 raise ValueError('You are using a much too large value for ' +
                                  'the maximum step size: %.1f Å' % maxstep)
             self.maxstep = maxstep
+        self.alpha = self.maxstep
 
     def initialize(self):
         self.r0 = None
         self.f0 = None
-        self.maxstep = 0.2
+        self.maxstep = 0.1
         self.alpha = 0.1
 
     def read(self):
