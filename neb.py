@@ -100,12 +100,9 @@ class NEB:
     def get_forces(self):
         """Evaluate and return the forces."""
         images = self.images
-        forces = np.empty(((self.nimages - 2), self.natoms, 3))
+        forces = np.empty((self.nimages, self.natoms, 3))
         
-        if self.use_clancelot:
-            energies = np.empty(self.nimages)
-        else:
-            energies = np.empty(self.nimages - 2)
+        energies = np.empty(self.nimages)
 
         if self.remove_rotation_and_translation:
             # Remove translation and rotation between
@@ -115,38 +112,36 @@ class NEB:
 
         if not self.parallel:
             # Do all images - one at a time:
-            if self.use_clancelot:
-                energies[0] = images[0].get_potential_energy()
-            else:
-                energies_0 = images[0].get_potential_energy()
-            for i in range(1, self.nimages - 1):
-                if self.use_clancelot:
-                    energies[i] = images[i].get_potential_energy()
-                else:
-                    energies[i - 1] = images[i].get_potential_energy()
-                forces[i - 1] = images[i].get_forces()
-            if self.use_clancelot:
-                energies[-1] = images[-1].get_potential_energy()
+            for i in range(self.nimages):
+                energies[i] = images[i].get_potential_energy()
+                forces[i] = images[i].get_forces()
+            forces = forces[1:-1]
+            if not self.use_clancelot:
+                energies = energies[1:-1]
 
         elif self.world.size == 1:
             def run(image, energies, forces):
                 energies[:] = image.get_potential_energy()
                 forces[:] = image.get_forces()
+
             threads = [threading.Thread(target=run,
                                         args=(images[i],
-                                              energies[i - 1:i],
-                                              forces[i - 1:i]))
-                       for i in range(1, self.nimages - 1)]
-            for thread in threads:
+                                              energies[i:i+1],
+                                              forces[i:i+1]))
+                       for i in range(self.nimages)]
+            for i,thread in enumerate(threads):
                 thread.start()
             for thread in threads:
                 thread.join()
+            forces = forces[1:-1]
+            if not self.use_clancelot:
+                energies = energies[1:-1]
         else:
             # Parallelize over images:
-            i = self.world.rank * (self.nimages - 2) // self.world.size + 1
+            i = self.world.rank * (self.nimages) // self.world.size + 1
             try:
-                energies[i - 1] = images[i].get_potential_energy()
-                forces[i - 1] = images[i].get_forces()
+                energies[i] = images[i].get_potential_energy()
+                forces[i] = images[i].get_forces()
             except:
                 # Make sure other images also fail:
                 error = self.world.sum(1.0)
@@ -156,10 +151,13 @@ class NEB:
                 if error:
                     raise RuntimeError('Parallel NEB failed!')
 
-            for i in range(1, self.nimages - 1):
-                root = (i - 1) * self.world.size // (self.nimages - 2)
-                self.world.broadcast(energies[i - 1:i], root)
-                self.world.broadcast(forces[i - 1], root)
+            for i in range(self.nimages):
+                root = (i) * self.world.size // (self.nimages)
+                self.world.broadcast(energies[i], root)
+                self.world.broadcast(forces[i], root)
+            forces = forces[1:-1]
+            if not self.use_clancelot:
+                energies = energies[1:-1]
 
         if self.use_clancelot:
             V = energies.copy()
