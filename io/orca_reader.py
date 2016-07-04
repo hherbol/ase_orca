@@ -62,6 +62,7 @@ class OrcaReader:
         section, s_position = content, "CARTESIAN COORDINATES (ANGSTROEM)"
         s_energy = "FINAL SINGLE POINT ENERGY"
         s_gradient = "CARTESIAN GRADIENT"
+	s_gradient_2 = "The final MP2 gradient"
 
         while s_position in section:
             section = section[section.find(s_position)+len(s_position):]
@@ -73,13 +74,19 @@ class OrcaReader:
                 positions.append([float(a[1]),float(a[2]),float(a[3])])
             energy = float(section[section.find(s_energy):].split("\n")[0].split()[-1])
 
-            
+            # TODO - Read from .engrad file instead            
             if s_gradient in section:
                 grad_block = section[section.find(s_gradient):].split("\n\n")[1].split("\n")
                 gradient = []
                 for line in grad_block:
                     a = line.split()
                     gradient.append([float(b) for b in a[3:]])
+            elif s_gradient_2 in section:
+		grad_block = section[section.find(s_gradient_2):].split("\n\n")[0].split("\n")[1:]
+                gradient = []
+                for line in grad_block:
+                    a = line.split()
+                    gradient.append([float(b) for b in a[1:]])
             else:
                 gradient = None
 
