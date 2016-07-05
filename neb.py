@@ -5,7 +5,7 @@ from math import sqrt
 import numpy as np
 
 import ase.parallel as mpi
-from ase.build import minimize_rotation_and_translation
+from ase.build import minimize_rotation_and_translation, orthogonal_procrustes
 from ase.calculators.calculator import Calculator
 from ase.calculators.singlepoint import SinglePointCalculator
 from ase.io import read
@@ -15,7 +15,7 @@ import ase.units as units
 
 class NEB:
     def __init__(self, images, k=0.1, climb=False, parallel=False,
-                 remove_rotation_and_translation=False, world=None, clancelot=False):
+                 remove_rotation_and_translation=False, procrustes=False, world=None, clancelot=False):
         """Nudged elastic band.
 
         images: list of Atoms objects
@@ -38,6 +38,7 @@ class NEB:
         self.nimages = len(images)
         self.emax = np.nan
         self.use_clancelot = clancelot
+        self.procrustes = procrustes
         
         self.remove_rotation_and_translation = remove_rotation_and_translation
         
@@ -51,10 +52,23 @@ class NEB:
 
         if parallel:
             assert world.size == 1 or world.size % (self.nimages - 2) == 0
+        if self.procrustes:
+            self.remove_rotation_and_translation = True
+
+    def rotate(self, image, R):
+        pos = image.get_positions()
+        for i,atom in enumerate(pos):
+            pos[i] = np.dot(atom,R)
+        return pos
 
     def interpolate(self, method='linear', mic=False):
         if self.remove_rotation_and_translation:
-            minimize_rotation_and_translation(self.images[0], self.images[-1])
+            if self.procrustes:
+                rotation_matrix, _ = orthogonal_procrustes(self.images[-1], self.images[0])
+                self.images[-1].set_positions(self.images[-1].get_positions()*rotation_matrix)
+            else:
+                minimize_rotation_and_translation(self.images[0], self.images[-1])
+
         
         interpolate(self.images, mic)
                  
@@ -108,7 +122,11 @@ class NEB:
             # Remove translation and rotation between
             # images before computing forces:
             for i in range(1, self.nimages):
-                minimize_rotation_and_translation(images[i - 1], images[i])
+                if self.procrustes:
+                    rotation_matrix, _ = orthogonal_procrustes(self.images[i], self.images[i-1])
+                    self.images[i].set_positions(self.rotate(self.images[i], rotation_matrix))
+                else:
+                    minimize_rotation_and_translation(images[i - 1], images[i])
 
         if not self.parallel:
             # Do all images - one at a time:

@@ -1,5 +1,6 @@
 import numpy as np
-
+from scipy.linalg.decomp_svd import svd # Singular Value Decomposition, factors matrices
+from scipy.linalg import det
 
 def rotation_matrix_from_points(m0, m1):
     """Returns a rigid transformation/rotation matrix that minimizes the
@@ -90,13 +91,12 @@ def minimize_rotation_and_translation(target, atoms):
 
     atoms.set_positions(np.dot(p, R.T) + c0)
 
-def orthogonal_procrustes(A, ref_matrix, reflection=False):
+def orthogonal_procrustes(to_rotate, B, reflection=False):
     # Adaptation of scipy.linalg.orthogonal_procrustes -> https://github.com/scipy/scipy/blob/v0.16.0/scipy/linalg/_procrustes.py#L14
     # Info here: http://compgroups.net/comp.soft-sys.matlab/procrustes-analysis-without-reflection/896635
     # goal is to find unitary matrix R with det(R) > 0 such that ||A*R - ref_matrix||^2 is minimized
-    from scipy.linalg.decomp_svd import svd # Singular Value Decomposition, factors matrices
-    from scipy.linalg import det
-    import numpy as np
+    A = to_rotate.get_positions()
+    ref_matrix = B.get_positions()
 
     A = np.asarray_chkfinite(A)
     ref_matrix = np.asarray_chkfinite(ref_matrix)
@@ -105,7 +105,6 @@ def orthogonal_procrustes(A, ref_matrix, reflection=False):
         raise ValueError('expected ndim to be 2, but observed %s' % A.ndim)
     if A.shape != ref_matrix.shape:
         raise ValueError('the shapes of A and ref_matrix differ (%s vs %s)' % (A.shape, ref_matrix.shape))
-
 
     u, w, vt = svd(ref_matrix.T.dot(A).T)
 
