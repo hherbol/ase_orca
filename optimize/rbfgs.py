@@ -49,7 +49,9 @@ class RBFGS(Optimizer):
         self.H = None
         self.r0 = None
         self.f0 = None
-        self.maxstep = 0.01
+        self.maxstep = 0.1
+        self.beta = 0.5
+        self.prev = (float("inf"),None,None,None)
 
     def read(self):
         self.H, self.r0, self.f0, self.maxstep = self.load()
@@ -58,30 +60,54 @@ class RBFGS(Optimizer):
         # Get variables
         atoms = self.atoms
         procrustes = atoms.procrustes
-        r = atoms.get_positions()
+        r_full = atoms.get_positions_full().reshape((-1, atoms.natoms, 3))
+        r = r_full[1:-1].copy().reshape((-1,3))
+        r_full = r_full
+
+        fmax = np.sqrt((f**2).sum(axis=1).max())
         f = f.reshape(-1)
 
+        # Backtrack if needed
+        if fmax > self.prev[0]:
+            r,f,self.H = self.prev[1].copy(), self.prev[2].copy(), self.prev[3].copy() if self.prev[3] is not None else None
+            #r,f,self.H = self.prev[1].copy(), self.prev[2].copy(), None
+            self.maxstep *= self.beta
+            #print "Backtrack to %lg with sum(H) = %lg" % (self.maxstep, self.H.sum() if self.H is not None else -1)
+        else:
+            self.prev = (fmax, r.copy(), f.copy(), self.H if self.H is not None else None)
+            #print "Stored %lg with sum(H) = %lg" % (self.maxstep, self.H.sum() if self.H is not None else -1)
+
+        # Update inv hessian
         self.update(r.flat, f, self.r0, self.f0)
         
+        # Take step
         omega, V = eigh(self.H)
         dr = np.dot(V, np.dot(f, V) / np.fabs(omega)).reshape((-1, 3))
         steplengths = (dr**2).sum(1)**0.5
         dr = self.determine_step(dr, steplengths)
-        atoms.set_positions(r + dr)
 
-        # ROTATE
+
+        #atoms.set_positions(r + dr)
+
+        # Rotate coordinates
         full_rotation = np.array([np.empty((3,3)) for i in range((atoms.nimages-2) * atoms.natoms)])
-        images = atoms.get_positions_full().reshape((-1, atoms.natoms, 3))[:-1]
+        
+        #images = atoms.get_positions_full().reshape((-1, atoms.natoms, 3))[:-1]
+        images = np.append([r_full[0]], r+dr).reshape((-1, atoms.natoms, 3))
+
         for i in range(1,len(images)):
             rotation_matrix, _ = orthogonal_procrustes(images[i], images[i-1])
             for j,atom in enumerate(images[i]):
-                images[i][j] = np.dot(atom,rotation_matrix)
                 full_rotation[(i-1)*3+j] = rotation_matrix
-        new_pos = images[1:].flatten().reshape((-1,3))
+        R = block_diag(*full_rotation)
+
+        r = np.dot(r.flatten(),R)
+        dr = np.dot(dr.flatten(),R)
+        new_pos = (r+dr).reshape((-1,3))
         atoms.set_positions(new_pos)
 
         # Rotate the new and old gradient, as well as old positions
-        R = block_diag(*full_rotation)
+        
         new_forces = np.dot(f.flatten(),R)
         if self.r0 is not None:
             old_forces = np.dot(self.f0,R)
@@ -89,9 +115,11 @@ class RBFGS(Optimizer):
 
         # Rotate the hessian
         self.H = np.dot(np.dot(R,self.H), R.T)
-        
-        self.r0 = new_pos.flatten().copy()
+    
+        # Store previous results
+        self.r0 = r.flatten().copy()
         self.f0 = new_forces.copy()
+
         self.dump((self.H, self.r0, self.f0, self.maxstep))
 
     def step_1(self, f):
@@ -142,6 +170,47 @@ class RBFGS(Optimizer):
 
         self.dump((self.H, self.r0, self.f0, self.maxstep))
 
+    def step_2(self, f):
+        # Get variables
+        atoms = self.atoms
+        procrustes = atoms.procrustes
+        r = atoms.get_positions()
+        f = f.reshape(-1)
+
+        self.update(r.flat, f, self.r0, self.f0)
+        
+        omega, V = eigh(self.H)
+        dr = np.dot(V, np.dot(f, V) / np.fabs(omega)).reshape((-1, 3))
+        steplengths = (dr**2).sum(1)**0.5
+        dr = self.determine_step(dr, steplengths)
+        atoms.set_positions(r + dr)
+
+        # ROTATE
+        full_rotation = np.array([np.empty((3,3)) for i in range((atoms.nimages-2) * atoms.natoms)])
+        images = atoms.get_positions_full().reshape((-1, atoms.natoms, 3))[:-1]
+        for i in range(1,len(images)):
+            rotation_matrix, _ = orthogonal_procrustes(images[i], images[i-1])
+            for j,atom in enumerate(images[i]):
+                images[i][j] = np.dot(atom,rotation_matrix)
+                full_rotation[(i-1)*3+j] = rotation_matrix
+        new_pos = images[1:].flatten().reshape((-1,3))
+        atoms.set_positions(new_pos)
+
+        # Rotate the new and old gradient, as well as old positions
+        R = block_diag(*full_rotation)
+        new_forces = np.dot(f.flatten(),R)
+        if self.r0 is not None:
+            old_forces = np.dot(self.f0,R)
+            old_pos = np.dot(self.r0.flatten(),R)
+
+        # Rotate the hessian
+        self.H = np.dot(np.dot(R,self.H), R.T)
+        
+        self.r0 = new_pos.flatten().copy()
+        self.f0 = new_forces.copy()
+        self.dump((self.H, self.r0, self.f0, self.maxstep))
+
+
     def determine_step(self, dr, steplengths):
         """Determine step to take according to maxstep
         
@@ -149,9 +218,8 @@ class RBFGS(Optimizer):
         we still move along the eigendirection.
         """
         maxsteplength = np.max(steplengths)
-        if maxsteplength >= self.maxstep:
-            print("MAX STEP")
-            dr *= self.maxstep / maxsteplength
+        #if maxsteplength >= self.maxstep:
+        dr *= self.maxstep / maxsteplength
         
         return dr
 
