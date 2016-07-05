@@ -6,12 +6,13 @@ from ase.optimize.fire import FIRE
 from ase.optimize.lbfgs import LBFGS, LBFGSLineSearch
 from ase.optimize.bfgslinesearch import BFGSLineSearch
 from ase.optimize.bfgs import BFGS
+from ase.optimize.rbfgs import RBFGS
 from ase.optimize.oldqn import GoodOldQuasiNewton
 from ase.optimize.sd import SD
 
 QuasiNewton = BFGSLineSearch
 
 __all__ = ['MDMin', 'HessLBFGS', 'LineLBFGS', 'FIRE', 'LBFGS',
-           'LBFGSLineSearch', 'BFGSLineSearch', 'BFGS',
+           'LBFGSLineSearch', 'BFGSLineSearch', 'BFGS','RBFGS',
            'GoodOldQuasiNewton', 'QuasiNewton',
            'SD']
