@@ -55,6 +55,11 @@ class NEB:
         if self.procrustes:
             self.remove_rotation_and_translation = True
 
+        if self.procrustes:
+            for i in range(1, self.nimages):
+                rotation_matrix, _ = orthogonal_procrustes(self.images[i], self.images[i-1])
+                self.images[i].set_positions(self.rotate(self.images[i], rotation_matrix))
+
     def rotate(self, image, R):
         pos = image.get_positions()
         for i,atom in enumerate(pos):
@@ -98,6 +103,15 @@ class NEB:
             n1 = n2
         return positions
 
+    def get_positions_full(self):
+        positions = np.empty(((self.nimages) * self.natoms, 3))
+        n1 = 0
+        for image in self.images:
+            n2 = n1 + self.natoms
+            positions[n1:n2] = image.get_positions()
+            n1 = n2
+        return positions
+
     def set_positions(self, positions):
         n1 = 0
         for image in self.images[1:-1]:
@@ -118,15 +132,11 @@ class NEB:
         
         energies = np.empty(self.nimages)
 
-        if self.remove_rotation_and_translation:
+        if self.remove_rotation_and_translation and not self.procrustes:
             # Remove translation and rotation between
             # images before computing forces:
             for i in range(1, self.nimages):
-                if self.procrustes:
-                    rotation_matrix, _ = orthogonal_procrustes(self.images[i], self.images[i-1])
-                    self.images[i].set_positions(self.rotate(self.images[i], rotation_matrix))
-                else:
-                    minimize_rotation_and_translation(images[i - 1], images[i])
+                minimize_rotation_and_translation(images[i - 1], images[i])
 
         if not self.parallel:
             # Do all images - one at a time:

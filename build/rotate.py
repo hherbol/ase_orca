@@ -95,8 +95,15 @@ def orthogonal_procrustes(to_rotate, B, reflection=False):
     # Adaptation of scipy.linalg.orthogonal_procrustes -> https://github.com/scipy/scipy/blob/v0.16.0/scipy/linalg/_procrustes.py#L14
     # Info here: http://compgroups.net/comp.soft-sys.matlab/procrustes-analysis-without-reflection/896635
     # goal is to find unitary matrix R with det(R) > 0 such that ||A*R - ref_matrix||^2 is minimized
-    A = to_rotate.get_positions()
-    ref_matrix = B.get_positions()
+    try:
+        A = to_rotate.get_positions()
+    except AttributeError:
+        A = to_rotate.copy()
+
+    try:
+        ref_matrix = B.get_positions()
+    except AttributeError:
+        ref_matrix = B.copy()
 
     A = np.asarray_chkfinite(A)
     ref_matrix = np.asarray_chkfinite(ref_matrix)

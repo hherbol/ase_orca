@@ -3,11 +3,13 @@ import numpy as np
 from numpy.linalg import eigh
 
 from ase.optimize.optimize import Optimizer
+from ase.build import orthogonal_procrustes
 
+from scipy.linalg import block_diag
 
 class RBFGS(Optimizer):
     def __init__(self, atoms, restart=None, logfile='-', trajectory=None,
-                 maxstep=None, master=None):
+                 maxstep=None, master=None, procrustes=True):
         """RBFGS optimizer.
 
         Parameters:
@@ -47,23 +49,97 @@ class RBFGS(Optimizer):
         self.H = None
         self.r0 = None
         self.f0 = None
-        self.maxstep = 0.04
+        self.maxstep = 0.01
 
     def read(self):
         self.H, self.r0, self.f0, self.maxstep = self.load()
 
     def step(self, f):
+        # Get variables
         atoms = self.atoms
+        procrustes = atoms.procrustes
         r = atoms.get_positions()
         f = f.reshape(-1)
+
         self.update(r.flat, f, self.r0, self.f0)
+        
         omega, V = eigh(self.H)
         dr = np.dot(V, np.dot(f, V) / np.fabs(omega)).reshape((-1, 3))
         steplengths = (dr**2).sum(1)**0.5
         dr = self.determine_step(dr, steplengths)
         atoms.set_positions(r + dr)
-        self.r0 = r.flat.copy()
-        self.f0 = f.copy()
+
+        # ROTATE
+        full_rotation = np.array([np.empty((3,3)) for i in range((atoms.nimages-2) * atoms.natoms)])
+        images = atoms.get_positions_full().reshape((-1, atoms.natoms, 3))[:-1]
+        for i in range(1,len(images)):
+            rotation_matrix, _ = orthogonal_procrustes(images[i], images[i-1])
+            for j,atom in enumerate(images[i]):
+                images[i][j] = np.dot(atom,rotation_matrix)
+                full_rotation[(i-1)*3+j] = rotation_matrix
+        new_pos = images[1:].flatten().reshape((-1,3))
+        atoms.set_positions(new_pos)
+
+        # Rotate the new and old gradient, as well as old positions
+        R = block_diag(*full_rotation)
+        new_forces = np.dot(f.flatten(),R)
+        if self.r0 is not None:
+            old_forces = np.dot(self.f0,R)
+            old_pos = np.dot(self.r0.flatten(),R)
+
+        # Rotate the hessian
+        self.H = np.dot(np.dot(R,self.H), R.T)
+        
+        self.r0 = new_pos.flatten().copy()
+        self.f0 = new_forces.copy()
+        self.dump((self.H, self.r0, self.f0, self.maxstep))
+
+    def step_1(self, f):
+
+        # Get variables
+        atoms = self.atoms
+        procrustes = atoms.procrustes
+        r = atoms.get_positions()
+        f = f.reshape(-1)
+
+        # If our first time, initialize H to identity
+        if self.H is None:
+            self.update(r.flat, f, self.r0, self.f0)
+
+        # Take step towards minimum
+        omega, V = eigh(self.H)
+        dr = np.dot(V, np.dot(f, V) / np.fabs(omega)).reshape((-1, 3))
+        steplengths = (dr**2).sum(1)**0.5
+        dr = self.determine_step(dr, steplengths)
+        atoms.set_positions(r + dr)
+
+        # Rotate coordinates
+        full_rotation = np.array([np.empty((3,3)) for i in range((atoms.nimages-2) * atoms.natoms)])
+        images = atoms.get_positions_full()
+        images = images.reshape((-1, atoms.natoms, 3))[:-1]
+        for i in range(1,len(images)):
+            rotation_matrix, _ = orthogonal_procrustes(images[i], images[i-1])
+            for j,atom in enumerate(images[i]):
+                images[i][j] = np.dot(atom,rotation_matrix)
+                full_rotation[(i-1)*3+j] = rotation_matrix
+        new_pos = images[1:].flatten().reshape((-1,3))
+        atoms.set_positions(new_pos)
+
+        # Rotate the new and old gradient, as well as old positions
+        R = block_diag(*full_rotation)
+        new_forces = np.dot(f.flatten(),R)
+        if self.r0 is not None:
+            old_forces = np.dot(self.f0,R)
+            old_pos = np.dot(self.r0.flatten(),R)
+
+        # Rotate the hessian
+        self.H = np.dot(np.dot(R,self.H), R.T)
+
+        if self.r0 is not None:
+            self.update(new_pos.flatten(), new_forces, old_pos, old_forces)
+        self.r0 = new_pos.flatten().copy()
+        self.f0 = new_forces.copy()
+
         self.dump((self.H, self.r0, self.f0, self.maxstep))
 
     def determine_step(self, dr, steplengths):
@@ -74,6 +150,7 @@ class RBFGS(Optimizer):
         """
         maxsteplength = np.max(steplengths)
         if maxsteplength >= self.maxstep:
+            print("MAX STEP")
             dr *= self.maxstep / maxsteplength
         
         return dr
