@@ -70,8 +70,10 @@ class RBFGS(Optimizer):
             #r,f,self.H = self.prev[1].copy(), self.prev[2].copy(), self.prev[3].copy() if self.prev[3] is not None else None
             r,f,self.H = self.prev[1].copy(), self.prev[2].copy(), None
             self.maxstep *= self.beta
+            if self.maxstep < 1e-6:
+                raise Exception("Step size has been reduced too low!")
         else:
-            self.prev = (fmax, r.copy(), f.copy(), self.H if self.H is not None else None)
+            self.prev = (fmax, r.copy(), f.copy(), self.H.copy() if self.H is not None else None)
 
         # Update inv hessian
         self.update(r.flat, f, self.r0, self.f0)
@@ -98,9 +100,6 @@ class RBFGS(Optimizer):
 
             # Rotate the new and old gradient, as well as old positions
             new_forces = np.dot(f.flatten(),R)
-            if self.r0 is not None:
-                old_forces = np.dot(self.f0,R)
-                old_pos = np.dot(self.r0.flatten(),R)
 
             # Rotate the hessian
             self.H = np.dot(np.dot(R,self.H), R.T)
