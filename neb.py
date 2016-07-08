@@ -132,11 +132,16 @@ class NEB:
         
         energies = np.empty(self.nimages)
 
-        if self.remove_rotation_and_translation and not self.procrustes:
+        if self.remove_rotation_and_translation:
             # Remove translation and rotation between
             # images before computing forces:
-            for i in range(1, self.nimages):
-                minimize_rotation_and_translation(images[i - 1], images[i])
+            if self.procrustes:
+                for i in range(1, self.nimages):
+                    rotation_matrix, _ = orthogonal_procrustes(self.images[i], self.images[i-1])
+                    self.images[i].set_positions(self.rotate(self.images[i], rotation_matrix))
+            else:
+                for i in range(1, self.nimages):
+                    minimize_rotation_and_translation(images[i - 1], images[i])
 
         if not self.parallel:
             # Do all images - one at a time:
