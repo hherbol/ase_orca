@@ -46,8 +46,6 @@ class RBFGS(Optimizer):
                                  'the maximum step size: %.1f Å' % maxstep)
             self.maxstep = maxstep
 
-        #self.H = np.eye(3 * len(self.atoms))
-
     def initialize(self):
         self.H = None
         self.r0 = None
@@ -67,6 +65,7 @@ class RBFGS(Optimizer):
         f = f.reshape(-1)
         self.update_hessian_bfgs(r.flat, f, self.r0, self.f0)
         omega, V = eigh(self.H)
+	# I think this is a "Preconditioning" step... 
         dr = np.dot(V, np.dot(f, V) / np.fabs(omega)).reshape((-1, 3))
         steplengths = (dr**2).sum(1)**0.5
         dr = self.determine_step(dr, steplengths)
@@ -249,14 +248,3 @@ class RBFGS(Optimizer):
                 full_rotation[(i-1)*3+j] = rotation_matrix
         
         return block_diag(*full_rotation)
-
-class oldRBFGS(RBFGS):
-    def determine_step(self, dr, steplengths):
-        """Old RBFGS behaviour for scaling step lengths
-
-        This keeps the behaviour of truncating individual steps. Some might
-        depend of this as some absurd kind of stimulated annealing to find the
-        global minimum.
-        """
-        dr /= np.maximum(steplengths / self.maxstep, 1.0).reshape(-1, 1)
-        return dr
