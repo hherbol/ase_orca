@@ -31,3 +31,7 @@ In linux, you'll find the python files in a folder such as:
     git remote add origin git@github.com:hherbol/ase_orca.git
     git fetch --all
     git reset --hard origin/master
+
+### Error Handling
+
+You might have to change the orca path in calculators/orca.py if, upon attempting to run an example script, it crashes.  This is due to the fact that the orca path needs to be filled out fully (especially when doing multiple processors).
