@@ -1,7 +1,6 @@
 # My custom implementation of steepest descent
 # -*- coding: utf-8 -*-
 import numpy as np
-from numpy.linalg import eigh
 
 from ase.optimize.optimize import Optimizer
 import ase.units as units
@@ -18,21 +17,21 @@ class SD(Optimizer):
             The Atoms object to relax.
 
         restart: string
-            Pickle file used to store hessian matrix. If set, file with 
+            Pickle file used to store hessian matrix. If set, file with
             such a name will be searched and hessian matrix stored will
             be used, if the file exists.
-        
+
         trajectory: string
             Pickle file used to store trajectory of atomic movement.
 
         logfile: file object or str
             If *logfile* is a string, a file with that name will be opened.
             Use '-' for stdout.
- 
+
         maxstep: float
             Used to set the maximum distance an atom can move per
             iteration (default value is 0.04 Å).
-        
+
         master: boolean
             Defaults to None, which causes only rank 0 to save files.  If
             set to true,  this rank will save files.
@@ -58,9 +57,10 @@ class SD(Optimizer):
     def step(self, f_eV):
         atoms = self.atoms
         r = atoms.get_positions()
-        # To maintain similarity in comparison with clancelot, convert force to units of hartree
+        # To maintain similarity in comparison with clancelot, convert force
+        # to units of hartree
         f = f_eV.copy() / units.Hartree
-        f = f.reshape(-1).reshape((-1,3))
+        f = f.reshape(-1).reshape((-1, 3))
 
         max_step_length = np.sqrt(((f)**2).sum(axis=1).max())
         # Scale if max step is larger than alpha
@@ -70,7 +70,7 @@ class SD(Optimizer):
             dr = f * self.alpha
 
         self.r0 = (r + dr).copy()
-        
+
         self.f0 = f.reshape(-1).copy()
 
         atoms.set_positions(self.r0)
