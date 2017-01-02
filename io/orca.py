@@ -8,6 +8,7 @@ from ase.calculators.singlepoint import SinglePointCalculator
 from ase.io.orca_reader import OrcaReader
 from ase.calculators.orca import orca
 
+
 def read_orca_out(filename, index=-1, quantity='atoms'):
     """"Interface to orcaReader and returns various quantities"""
     energy = 0.0
@@ -23,8 +24,7 @@ def read_orca_out(filename, index=-1, quantity='atoms'):
     for number in atomic_numbers:
         formula += chemical_symbols[number]
 
-    positions = np.array(data['Positions'])*ase.units.Angstrom
-    method = data['Method']
+    positions = np.array(data['Positions']) * ase.units.Angstrom
     version = data['Version']
     charge = data['Charge']
     multiplicity = data['Multiplicity']
@@ -33,7 +33,7 @@ def read_orca_out(filename, index=-1, quantity='atoms'):
     if data['Gradient'] is None:
         forces = None
     else:
-        forces = [-1*np.array(d) for d in data['Gradient']]
+        forces = [-1 * np.array(d) for d in data['Gradient']]
         forces = np.array(forces) * ase.units.Hartree / ase.units.Bohr
 
     atoms = Atoms(formula, positions=positions)

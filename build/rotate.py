@@ -1,11 +1,13 @@
 import numpy as np
-from scipy.linalg.decomp_svd import svd # Singular Value Decomposition, factors matrices
+# Singular Value Decomposition, factors matrices
+from scipy.linalg.decomp_svd import svd
 from scipy.linalg import det
+
 
 def rotation_matrix_from_points(m0, m1):
     """Returns a rigid transformation/rotation matrix that minimizes the
     RMSD between two set of points.
-    
+
     m0 and m1 should be (3, npoints) numpy arrays with
     coordinates as columns::
 
@@ -18,7 +20,7 @@ def rotation_matrix_from_points(m0, m1):
 
     The rotation matrix is computed using quaternion
     algebra as detailed in::
-        
+
         Melander et al. J. Chem. Theory Comput., 2015, 11,1055
     """
 
@@ -49,10 +51,10 @@ def rotation_matrix_from_points(m0, m1):
 
     return R
 
-    
+
 def quaternion_to_matrix(q):
     """Returns a rotation matrix.
-    
+
     Computed from a unit quaternion Input as (4,) numpy array.
     """
 
@@ -71,9 +73,9 @@ def quaternion_to_matrix(q):
 
 def minimize_rotation_and_translation(target, atoms):
     """Minimize RMSD between atoms and target.
-    
+
     Rotate and translate atoms to best match target.  For more details, see::
-        
+
         Melander et al. J. Chem. Theory Comput., 2015, 11,1055
     """
 
@@ -91,55 +93,99 @@ def minimize_rotation_and_translation(target, atoms):
 
     atoms.set_positions(np.dot(p, R.T) + c0)
 
-def orthogonal_procrustes(to_rotate, B, reflection=False):
-    # Adaptation of scipy.linalg.orthogonal_procrustes -> https://github.com/scipy/scipy/blob/v0.16.0/scipy/linalg/_procrustes.py#L14
-    # Info here: http://compgroups.net/comp.soft-sys.matlab/procrustes-analysis-without-reflection/896635
-    # goal is to find unitary matrix R with det(R) > 0 such that ||A*R - ref_matrix||^2 is minimized
-    try:
-        A = to_rotate.get_positions()
-    except AttributeError:
-        A = to_rotate.copy()
 
-    try:
-        ref_matrix = B.get_positions()
-    except AttributeError:
-        ref_matrix = B.copy()
+def orthogonal_procrustes(A, ref_matrix, reflection=False):
+    """
+    Using the orthogonal procrustes method, we find the unitary matrix R with
+    det(R) > 0 such that ||A*R - ref_matrix||^2 is minimized.  This varies
+    from that within scipy by the addition of the reflection term, allowing
+    and disallowing inversion.  NOTE - This means that the rotation matrix is
+    used for right side multiplication!
+
+    **Parameters**
+
+        A: *list,* :class:`structures.Atom`
+            A list of atoms for which R will minimize the frobenius
+            norm ||A*R - ref_matrix||^2.
+        ref_matrix: *list,* :class:`structures.Atom`
+            A list of atoms for which *A* is being rotated towards.
+        reflection: *bool, optional*
+            Whether inversion is allowed (True) or not (False).
+
+    **Returns**
+
+        R: *list, list, float*
+            Right multiplication rotation matrix to best overlay A onto the
+            reference matrix.
+        scale: *float*
+            Scalar between the matrices.
+
+    **Derivation**
+
+        Goal: minimize ||A\*R - ref||^2, switch to trace
+
+        trace((A\*R-ref).T\*(A\*R-ref)), now we distribute
+
+        trace(R'\*A'\*A\*R) + trace(ref.T\*ref) - trace((A\*R).T\*ref) -
+        trace(ref.T\*(A\*R)), trace doesn't care about order, so re-order
+
+        trace(R\*R.T\*A.T\*A) + trace(ref.T\*ref) - trace(R.T\*A.T\*ref) -
+        trace(ref.T\*A\*R), simplify
+
+        trace(A.T\*A) + trace(ref.T\*ref) - 2\*trace(ref.T\*A\*R)
+
+        Thus, to minimize we want to maximize trace(ref.T \* A \* R)
+
+        u\*w\*v.T = (ref.T\*A).T
+
+        ref.T \* A = w \* u.T \* v
+
+        trace(ref.T \* A \* R) = trace (w \* u.T \* v \* R)
+
+        differences minimized when trace(ref.T \* A \* R) is maximized, thus
+        when trace(u.T \* v \* R) is maximized
+
+        This occurs when u.T \* v \* R = I (as u, v and R are all unitary
+        matrices so max is 1)
+
+        R is a rotation matrix so R.T = R^-1
+
+        u.T \* v \* I = R^-1 = R.T
+
+        R = u \* v.T
+
+        Thus, R = u.dot(vt)
+
+
+    **References**
+
+        * https://github.com/scipy/scipy/blob/v0.16.0/scipy/linalg/
+          _procrustes.py#L14
+        * http://compgroups.net/comp.soft-sys.matlab/procrustes-analysis
+          -without-reflection/896635
+    """
 
     A = np.asarray_chkfinite(A)
     ref_matrix = np.asarray_chkfinite(ref_matrix)
 
     if A.ndim != 2:
-        raise ValueError('expected ndim to be 2, but observed %s' % A.ndim)
+        raise ValueError('expected ndim to be 2, but observed %s'
+                         % A.ndim)
     if A.shape != ref_matrix.shape:
-        raise ValueError('the shapes of A and ref_matrix differ (%s vs %s)' % (A.shape, ref_matrix.shape))
+        raise ValueError('the shapes of A and ref_matrix differ (%s vs %s)'
+                         % (A.shape, ref_matrix.shape))
 
-    u, w, vt = svd(ref_matrix.T.dot(A).T)
+    u, w, vt = svd(A.T.dot(ref_matrix))
 
-    # Goal: minimize ||A*R - ref||^2, switch to trace
-    # trace((A*R-ref).T*(A*R-ref)), now we distribute
-    # trace(R'*A'*A*R) + trace(ref.T*ref) - trace((A*R).T*ref) - trace(ref.T*(A*R)), trace doesn't care about order, so re-order
-    # trace(R*R.T*A.T*A) + trace(ref.T*ref) - trace(R.T*A.T*ref) - trace(ref.T*A*R), simplify
-    # trace(A.T*A) + trace(ref.T*ref) - 2*trace(ref.T*A*R)
-    # Thus, to minimize we want to maximize trace(ref.T * A * R)
-
-    # u*w*v.T = (ref.T*A).T
-    # ref.T * A = w * u.T * v
-    # trace(ref.T * A * R) = trace (w * u.T * v * R)
-    # differences minimized when trace(ref.T * A * R) is maximized, thus when trace(u.T * v * R) is maximized
-    # This occurs when u.T * v * R = I (as u, v and R are all unitary matrices so max is 1)
-    # R is a rotation matrix so R.T = R^-1
-    # u.T * v * I = R^-1 = R.T
-    # R = u * v.T
-    # Thus, R = u.dot(vt)
-
-    R = u.dot(vt) # Get the rotation matrix, including reflections
-    if not reflection and det(R) < 0: # If we don't want reflection
-        # To remove reflection, we change the sign of the rightmost column of u (or v) and the scalar associated
+    R = u.dot(vt)  # Get the rotation matrix, including reflections
+    if not reflection and scipy.linalg.det(R) < 0:
+        # To remove reflection, we change the sign of the rightmost column of
+        # u (or v) and the scalar associated
         # with that column
-        u[:,-1] *= -1
+        u[:, -1] *= -1
         w[-1] *= -1
         R = u.dot(vt)
 
-    scale = w.sum() # Get the scaled difference
+    scale = w.sum()  # Get the scaled difference
 
-    return R,scale
+    return R, scale

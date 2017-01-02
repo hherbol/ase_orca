@@ -2,14 +2,53 @@ import os
 
 from ase.calculators.calculator import FileIOCalculator, Parameters, ReadError
 
+
+def which(program):
+    '''
+    A function to return the full path of a system executable.
+
+    **Parameters**
+
+        program: *str*
+            The name of the system executable to find.
+
+    **Returns**
+
+        path: *str or None*
+            The path to the system executable. If none exists, then None.
+
+    **Refs**
+
+        * http://stackoverflow.com/a/377028
+    '''
+
+    def is_exe(fpath):
+        return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
+
+    fpath, fname = os.path.split(program)
+    if fpath:
+        if is_exe(program):
+            return program
+    else:
+        for path in os.environ["PATH"].split(os.pathsep):
+            path = path.strip('"')
+            exe_file = os.path.join(path, program)
+            if is_exe(exe_file):
+                return exe_file
+
+    return None
+
+
 class orca(FileIOCalculator):
     """
     orca calculator
     """
-    name = 'orca'
+    name = which("orca")
+    if name is None:
+        raise Exception("Unable to find orca installation.")
 
     implemented_properties = ['energy', 'forces']
-    command = 'orca PREFIX.inp > PREFIX.log'
+    command = name + ' PREFIX.inp > PREFIX.log'
 
     default_parameters = {'charge': 0,
                           'multiplicity': 1,
@@ -72,43 +111,45 @@ class orca(FileIOCalculator):
         filename = self.label + '.inp'
         inputfile = open(filename, 'w')
 
-        if self.extra is None: self.extra = ""
+        if self.extra is None:
+            self.extra = ""
         route = '!'
         route += " %s" % self.parameters["method"]
         if self.parameters["basis"] is not None:
-          route += " %s" % self.parameters["basis"]
+            route += " %s" % self.parameters["basis"]
         if self.parameters["COSMO"] is not None:
-          route += " COSMO"
-          if "cosmo" not in self.extra.lower():
-            self.extra += "\n%cosmo\n SMD true\n solvent \""
-            self.extra += self.parameters["COSMO"]+"\"\n end"
+            route += " COSMO"
+            if "cosmo" not in self.extra.lower():
+                self.extra += "\n%cosmo\n SMD true\n solvent \""
+                self.extra += self.parameters["COSMO"] + "\"\n end"
 
         if self.parameters["RunTyp"] is not None:
-          if self.parameters["RunTyp"].upper() == "SP":
-            self.parameters["RunTyp"] = "Energy"
-          elif self.parameters["RunTyp"].upper() == "OPT":
-            self.parameters["RunTyp"] = "Opt"
-          elif self.parameters["RunTyp"].upper() == "ENGRAD":
-            self.parameters["RunTyp"] = "Gradient"
-          s = "\n%method\n RunTyp "+self.parameters["RunTyp"]+"\n end"
-          if s not in self.extra: self.extra += s
+            if self.parameters["RunTyp"].upper() == "SP":
+                self.parameters["RunTyp"] = "Energy"
+            elif self.parameters["RunTyp"].upper() == "OPT":
+                self.parameters["RunTyp"] = "Opt"
+            elif self.parameters["RunTyp"].upper() == "ENGRAD":
+                self.parameters["RunTyp"] = "Gradient"
+            s = "\n%method\n RunTyp " + self.parameters["RunTyp"] + "\n end"
+            if s not in self.extra:
+                self.extra += s
 
         inputfile.write(route)
         inputfile.write(self.extra)
 
         charge = self.parameters["charge"]
         multiplicity = self.parameters["multiplicity"]
-        inputfile.write("\n*xyz %d %d\n" % (charge,multiplicity))
-        
+        inputfile.write("\n*xyz %d %d\n" % (charge, multiplicity))
+
         # Input coordinates
         symbols = atoms.get_chemical_symbols()
         coordinates = atoms.get_positions()
         for i in range(len(atoms)):
-          inputfile.write('%-10s' % symbols[i])
-          for j in range(3):
-              inputfile.write('%20.10f' % coordinates[i, j])
-          inputfile.write('\n')
-        inputfile.write("*")  
+            inputfile.write('%-10s' % symbols[i])
+            for j in range(3):
+                inputfile.write('%20.10f' % coordinates[i, j])
+            inputfile.write('\n')
+        inputfile.write("*")
 
         inputfile.close()
 
@@ -119,7 +160,7 @@ class orca(FileIOCalculator):
         from ase.io.orca import read_orca_out
         filename = self.label
 
-        if not os.path.isfile(filename+".log"):
+        if not os.path.isfile(filename + ".log"):
             raise ReadError
 
         self.atoms = read_orca_out(filename, quantity='atoms')
@@ -130,7 +171,7 @@ class orca(FileIOCalculator):
         """Reads the output file using orcaReader"""
         from ase.io.orca import read_orca_out
 
-        filename = self.label+".log"
+        filename = self.label + ".log"
 
         if not os.path.isfile(filename):
             raise ReadError
@@ -139,7 +180,7 @@ class orca(FileIOCalculator):
         with open(filename, 'r') as fileobj:
             for quant in quantities:
                 self.results[quant] = read_orca_out(fileobj,
-                                                        quantity=quant)
+                                                    quantity=quant)
 
     def clean(self):
         """Cleans up from a previous run"""
